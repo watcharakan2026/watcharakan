@@ -1,0 +1,14 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "functions": {
+    "api/index.ts": {
+      "includeFiles": "{server/**,src/data/**,src/types/**,data/**}"
+    }
+  },
+  "rewrites": [
+    { "source": "/api", "destination": "/api/index?__path=" },
+    { "source": "/api/(.*)", "destination": "/api/index?__path=$1" },
+    { "source": "/((?!api/|layouts/|assets/).*)", "destination": "/index.html" }
+  ]
+}

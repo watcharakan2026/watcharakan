@@ -1,0 +1,6 @@
+{
+  "name": "Warehouse Fire Safety & Equipment Inspection System (CDC 2026)",
+  "description": "Enterprise warehouse fire extinguisher and fire hose cabinet QR inspection, real-time 2D interactive safety layout, corrective action tracking, and safety compliance dashboard.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
