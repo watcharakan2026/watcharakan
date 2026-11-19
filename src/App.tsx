@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Header, TabType } from './components/Header';
 import { DashboardOverview } from './components/DashboardOverview';
@@ -145,6 +145,39 @@ export default function App() {
     }
   }, []);
 
+  const isSyncingRef = useRef<boolean>(false);
+
+  // Quietly refresh all live data (equipment, metrics, logs, defects) across devices without UI flicker
+  const syncRemoteData = useCallback(async () => {
+    if (isSyncingRef.current) return;
+    isSyncingRef.current = true;
+    try {
+      const [fetchedEquip, fetchedMetrics, fetchedInspections, fetchedActions, fetchedUsers] = await Promise.all([
+        api.getEquipment(),
+        api.getMetrics(),
+        api.getInspections({ limit: 100 }),
+        api.getCorrectiveActions(),
+        api.getUsers(),
+      ]);
+      setEquipmentList(fetchedEquip);
+      setMetrics(fetchedMetrics);
+      setRecentInspections(fetchedInspections);
+      setCorrectiveActions(fetchedActions);
+      setUsers(fetchedUsers);
+
+      setSelectedEquipmentDetail(prev => {
+        if (!prev) return prev;
+        const latest = fetchedEquip.find(e => e.id.toUpperCase() === prev.id.toUpperCase());
+        if (!latest) return prev;
+        return JSON.stringify(latest) === JSON.stringify(prev) ? prev : latest;
+      });
+    } catch (err) {
+      console.error('Background sync failed:', err);
+    } finally {
+      isSyncingRef.current = false;
+    }
+  }, []);
+
   // Quietly refresh aggregated metrics & logs after optimistic local state updates (zero UI flicker)
   const refreshSummaryData = useCallback(async () => {
     try {
@@ -164,6 +197,30 @@ export default function App() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Auto-sync across Phone & PC when window regains focus or while tab is visible
+  useEffect(() => {
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        void syncRemoteData();
+      }
+    };
+
+    window.addEventListener('focus', handleVisibilityOrFocus);
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void syncRemoteData();
+      }
+    }, 5000);
+
+    return () => {
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+      window.clearInterval(intervalId);
+    };
+  }, [syncRemoteData]);
 
   // Callback when an inspection is submitted
   const handleInspectionSuccess = (updatedEquipment: Equipment) => {

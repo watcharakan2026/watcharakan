@@ -26,6 +26,11 @@ console.log('1/4 Building Vite frontend...');
 execSync('npm run build', { cwd: ROOT_DIR, stdio: 'inherit' });
 
 console.log('2/4 Preparing portable/ directory...');
+const existingPortableEnvPath = path.join(OUT_DIR, '.env');
+const existingPortableEnv = fs.existsSync(existingPortableEnvPath)
+  ? fs.readFileSync(existingPortableEnvPath, 'utf-8')
+  : null;
+
 fs.rmSync(OUT_DIR, { recursive: true, force: true });
 fs.mkdirSync(OUT_DIR, { recursive: true });
 
@@ -41,12 +46,18 @@ copyDirRecursive(path.join(ROOT_DIR, 'dist'), path.join(OUT_DIR, 'dist'));
 copyDirRecursive(path.join(ROOT_DIR, 'public'), path.join(OUT_DIR, 'public'));
 copyDirRecursive(path.join(ROOT_DIR, 'data'), path.join(OUT_DIR, 'data'));
 
+const rootEnvPath = path.join(ROOT_DIR, '.env');
+const rootEnv = fs.existsSync(rootEnvPath) ? fs.readFileSync(rootEnvPath, 'utf-8') : null;
 const envTemplate = `# Optional: ใส่ค่า Turso ถ้าต้องการซิงก์ฐานข้อมูลออนไลน์ (ถ้าเว้นว่างไว้จะบันทึกข้อมูลลงไฟล์ data/db.json บนเครื่องให้อัตโนมัติ)
 TURSO_DATABASE_URL=""
 TURSO_AUTH_TOKEN=""
 PORT=3000
 `;
-fs.writeFileSync(path.join(OUT_DIR, '.env'), envTemplate, 'utf-8');
+const finalEnvContent =
+  (rootEnv && rootEnv.includes('TURSO_DATABASE_URL=')) ? rootEnv
+  : (existingPortableEnv && existingPortableEnv.includes('TURSO_DATABASE_URL=')) ? existingPortableEnv
+  : envTemplate;
+fs.writeFileSync(path.join(OUT_DIR, '.env'), finalEnvContent, 'utf-8');
 
 const winBat = `@echo off
 chcp 65001 >nul

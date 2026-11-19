@@ -2,13 +2,13 @@ import { Equipment, InspectionRecord, CorrectiveAction, DashboardMetrics, ZoneIn
 
 export const api = {
   async getZones(): Promise<ZoneInfo[]> {
-    const res = await fetch('/api/zones');
+    const res = await fetch('/api/zones', { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch zones');
     return res.json();
   },
 
   async getUsers(): Promise<User[]> {
-    const res = await fetch('/api/users');
+    const res = await fetch('/api/users', { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch users');
     return res.json();
   },
@@ -20,13 +20,13 @@ export const api = {
     if (params?.type && params.type !== 'all') query.set('type', params.type);
     if (params?.search) query.set('search', params.search);
 
-    const res = await fetch(`/api/equipment?${query.toString()}`);
+    const res = await fetch(`/api/equipment?${query.toString()}`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch equipment');
     return res.json();
   },
 
   async getEquipmentById(id: string): Promise<{ equipment: Equipment; history: InspectionRecord[]; activeDefect?: CorrectiveAction }> {
-    const res = await fetch(`/api/equipment/${encodeURIComponent(id)}`);
+    const res = await fetch(`/api/equipment/${encodeURIComponent(id)}`, { cache: 'no-store' });
     if (!res.ok) throw new Error(`Equipment ${id} not found`);
     return res.json();
   },
@@ -115,7 +115,7 @@ export const api = {
     if (params?.result && params.result !== 'all') query.set('result', params.result);
     if (params?.limit) query.set('limit', params.limit.toString());
 
-    const res = await fetch(`/api/inspections?${query.toString()}`);
+    const res = await fetch(`/api/inspections?${query.toString()}`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch inspections');
     return res.json();
   },
@@ -125,7 +125,7 @@ export const api = {
     if (params?.status && params.status !== 'all') query.set('status', params.status);
     if (params?.zoneId && params.zoneId !== 'all') query.set('zoneId', params.zoneId);
 
-    const res = await fetch(`/api/corrective-actions?${query.toString()}`);
+    const res = await fetch(`/api/corrective-actions?${query.toString()}`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch corrective actions');
     return res.json();
   },
@@ -154,7 +154,7 @@ export const api = {
   },
 
   async getMetrics(): Promise<DashboardMetrics> {
-    const res = await fetch('/api/dashboard/metrics');
+    const res = await fetch('/api/dashboard/metrics', { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch dashboard metrics');
     return res.json();
   },

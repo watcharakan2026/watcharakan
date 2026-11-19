@@ -16,6 +16,7 @@ import {
   deleteUserInTurso,
   uploadPhotoToTursoBackend,
   fetchMediaFromTursoBackend,
+  getEquipmentHistoryFromTurso,
   type WorkspaceDatabaseState,
 } from './tursoDb.ts';
 
@@ -448,9 +449,17 @@ export async function handleCloudflareApiRequest(
     if (method === 'GET') {
       const equip = db.equipment.find(e => e.id.toUpperCase() === equipId.toUpperCase());
       if (!equip) return jsonResponse({ error: `Equipment ${equipId} not found` }, 404);
-      const history = db.inspections
+      let history = db.inspections
         .filter(i => i.equipmentId.toUpperCase() === equipId.toUpperCase())
         .sort((a, b) => new Date(b.inspectedAt).getTime() - new Date(a.inspectedAt).getTime());
+      if (getBackendDbMode() === 'turso' && tursoConnected) {
+        try {
+          const remoteHistory = await getEquipmentHistoryFromTurso(equip.id);
+          if (remoteHistory) history = remoteHistory;
+        } catch (err) {
+          console.warn('Turso equipment history fallback to cache:', err);
+        }
+      }
       const activeDefect = db.correctiveActions.find(
         c => c.equipmentId.toUpperCase() === equipId.toUpperCase() && c.status !== 'COMPLETED'
       );
@@ -461,8 +470,22 @@ export async function handleCloudflareApiRequest(
         const equipIndex = db.equipment.findIndex(e => e.id.toUpperCase() === equipId.toUpperCase());
         if (equipIndex === -1) return jsonResponse({ error: `Equipment ${equipId} not found` }, 404);
         const current = { ...db.equipment[equipIndex] };
-        const { xPercent, yPercent, subType, type, zoneId, zoneName, pageNumber, status, capacity, expiryDate, nextMaintenanceDate } =
-          await readJsonBody(request);
+        const {
+          xPercent,
+          yPercent,
+          subType,
+          type,
+          zoneId,
+          zoneName,
+          pageNumber,
+          status,
+          capacity,
+          expiryDate,
+          nextMaintenanceDate,
+          lastInspectorName,
+          lastInspectedAt,
+          lastResult,
+        } = await readJsonBody(request);
 
         if (xPercent !== undefined) current.xPercent = Math.max(0, Math.min(100, parseFloat(xPercent)));
         if (yPercent !== undefined) current.yPercent = Math.max(0, Math.min(100, parseFloat(yPercent)));
@@ -475,6 +498,9 @@ export async function handleCloudflareApiRequest(
         if (capacity !== undefined) current.capacity = capacity;
         if (expiryDate !== undefined) current.expiryDate = expiryDate;
         if (nextMaintenanceDate !== undefined) current.nextMaintenanceDate = nextMaintenanceDate;
+        if (lastInspectorName !== undefined) current.lastInspectorName = lastInspectorName;
+        if (lastInspectedAt !== undefined) current.lastInspectedAt = lastInspectedAt;
+        if (lastResult !== undefined) current.lastResult = lastResult;
 
         await upsertEquipmentInTurso([current]);
         markTursoWriteOk();
@@ -627,6 +653,7 @@ export async function handleCloudflareApiRequest(
           updatedEquipment = {
             ...db.equipment[equipIndex],
             lastResult: current.overallResult,
+            lastInspectorName: current.inspectorName,
             status: current.overallResult === 'PASS' ? 'READY' : 'DEFECTIVE',
           };
         }

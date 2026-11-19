@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import dotenv from 'dotenv';
 import express, { Request, Response } from 'express';
 import path from 'path';
 import fs from 'fs';
@@ -20,10 +21,12 @@ import {
   deleteUserInTurso,
   uploadPhotoToTursoBackend,
   fetchMediaFromTursoBackend,
+  getEquipmentHistoryFromTurso,
 } from './server/tursoDb.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.join(__dirname, '.env') });
 
 const isVercel = Boolean(process.env.VERCEL);
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -176,7 +179,7 @@ async function bootstrapTursoBackend(): Promise<void> {
   }
 }
 
-async function ensureTursoBootstrap(): Promise<void> {
+async function ensureTursoBootstrap(skipRefresh = false): Promise<void> {
   const mode = getBackendDbMode();
   if (
     bootstrapPromise &&
@@ -192,11 +195,11 @@ async function ensureTursoBootstrap(): Promise<void> {
   }
   await bootstrapPromise;
 
-  // On serverless or after brief TTL, keep reads fresh across warm containers
+  // Keep reads fresh across devices/instances after a brief TTL
   if (
+    !skipRefresh &&
     mode === 'turso' &&
     tursoConnected &&
-    isVercel &&
     Date.now() - lastTursoRefreshAt > 1500
   ) {
     if (!refreshPromise) {
@@ -230,8 +233,13 @@ export function createExpressApp(): express.Express {
   app.use(express.json({ limit: '25mb' }));
 
   // Ensure Turso connection & initial schema/seed are ready before serving API routes
-  app.use('/api', async (_req: Request, _res: Response, next) => {
-    await ensureTursoBootstrap();
+  app.use('/api', async (req: Request, res: Response, next) => {
+    const isMediaRoute = req.path.startsWith('/media/') || req.path.startsWith('/drive-file/');
+    if (req.method === 'GET' && !isMediaRoute) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+    }
+    await ensureTursoBootstrap(isMediaRoute || req.path === '/zones');
     next();
   });
 
@@ -406,14 +414,22 @@ export function createExpressApp(): express.Express {
   });
 
   // 5. Single equipment by ID
-  app.get('/api/equipment/:id', (req: Request, res: Response) => {
+  app.get('/api/equipment/:id', async (req: Request, res: Response) => {
     const equip = db.equipment.find(e => e.id.toUpperCase() === req.params.id.toUpperCase());
     if (!equip) {
       return res.status(404).json({ error: `Equipment ${req.params.id} not found` });
     }
-    const history = db.inspections
+    let history = db.inspections
       .filter(i => i.equipmentId.toUpperCase() === req.params.id.toUpperCase())
       .sort((a, b) => new Date(b.inspectedAt).getTime() - new Date(a.inspectedAt).getTime());
+    if (getBackendDbMode() === 'turso' && tursoConnected) {
+      try {
+        const remoteHistory = await getEquipmentHistoryFromTurso(equip.id);
+        if (remoteHistory) history = remoteHistory;
+      } catch (err) {
+        console.warn('Turso equipment history fallback to cache:', err);
+      }
+    }
     const activeDefect = db.correctiveActions.find(
       c => c.equipmentId.toUpperCase() === req.params.id.toUpperCase() && c.status !== 'COMPLETED'
     );
@@ -429,7 +445,22 @@ export function createExpressApp(): express.Express {
       }
 
       const current = { ...db.equipment[equipIndex] };
-      const { xPercent, yPercent, subType, type, zoneId, zoneName, pageNumber, status, capacity, expiryDate, nextMaintenanceDate } = req.body;
+      const {
+        xPercent,
+        yPercent,
+        subType,
+        type,
+        zoneId,
+        zoneName,
+        pageNumber,
+        status,
+        capacity,
+        expiryDate,
+        nextMaintenanceDate,
+        lastInspectorName,
+        lastInspectedAt,
+        lastResult,
+      } = req.body;
 
       if (xPercent !== undefined) current.xPercent = Math.max(0, Math.min(100, parseFloat(xPercent)));
       if (yPercent !== undefined) current.yPercent = Math.max(0, Math.min(100, parseFloat(yPercent)));
@@ -442,6 +473,9 @@ export function createExpressApp(): express.Express {
       if (capacity !== undefined) current.capacity = capacity;
       if (expiryDate !== undefined) current.expiryDate = expiryDate;
       if (nextMaintenanceDate !== undefined) current.nextMaintenanceDate = nextMaintenanceDate;
+      if (lastInspectorName !== undefined) current.lastInspectorName = lastInspectorName;
+      if (lastInspectedAt !== undefined) current.lastInspectedAt = lastInspectedAt;
+      if (lastResult !== undefined) current.lastResult = lastResult;
 
       await upsertEquipmentInTurso([current]);
       markTursoWriteOk();
@@ -694,6 +728,7 @@ export function createExpressApp(): express.Express {
         updatedEquipment = {
           ...db.equipment[equipIndex],
           lastResult: current.overallResult,
+          lastInspectorName: current.inspectorName,
           status: current.overallResult === 'PASS' ? 'READY' : 'DEFECTIVE',
         };
       }

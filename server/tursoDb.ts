@@ -135,6 +135,8 @@ const SCHEMA_STATEMENTS: string[] = [
     base64Data TEXT NOT NULL,
     createdAt TEXT NOT NULL
   )`,
+  `CREATE INDEX IF NOT EXISTS idx_inspections_date ON inspections (inspectedAt DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_inspections_equip_date ON inspections (equipmentId, inspectedAt DESC)`,
 ];
 
 let schemaReadyPromise: Promise<void> | null = null;
@@ -383,7 +385,7 @@ export async function loadFromTursoBackend(
   const [eqRes, inspRes, actRes, usrRes] = await client.batch(
     [
       'SELECT * FROM equipment',
-      'SELECT * FROM inspections ORDER BY inspectedAt DESC',
+      'SELECT * FROM inspections ORDER BY inspectedAt DESC LIMIT 250',
       'SELECT * FROM corrective_actions ORDER BY reportedAt DESC',
       'SELECT * FROM users',
     ],
@@ -397,6 +399,18 @@ export async function loadFromTursoBackend(
     users: usrRes.rows.map(r => rowToUser(r as Record<string, any>)),
     lastUpdated: new Date().toISOString(),
   };
+}
+
+export async function getEquipmentHistoryFromTurso(
+  equipmentId: string
+): Promise<InspectionRecord[] | null> {
+  if (getBackendDbMode() === 'local_json') return null;
+  const client = await ensureSchema();
+  const res = await client.execute({
+    sql: 'SELECT * FROM inspections WHERE UPPER(equipmentId) = UPPER(?) ORDER BY inspectedAt DESC',
+    args: [equipmentId],
+  });
+  return res.rows.map(r => rowToInspection(r as Record<string, any>));
 }
 
 export async function seedTursoDatabase(data: WorkspaceDatabaseState): Promise<void> {

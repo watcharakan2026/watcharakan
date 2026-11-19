@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { 
   X, 
@@ -80,6 +80,7 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
   const [editStatus, setEditStatus] = useState<Equipment['status']>(equipment.status);
   const [editExpiryDate, setEditExpiryDate] = useState<string>(equipment.expiryDate || '2030-12-31');
   const [editNextMaintenance, setEditNextMaintenance] = useState<string>(equipment.nextMaintenanceDate || '');
+  const [editLastInspectorName, setEditLastInspectorName] = useState<string>(equipment.lastInspectorName || '');
   const [editX, setEditX] = useState<number>(equipment.xPercent);
   const [editY, setEditY] = useState<number>(equipment.yPercent);
   
@@ -88,39 +89,75 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<boolean>(false);
   const [feedbackMessage, setFeedbackMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  const isEditingRef = useRef<boolean>(isEditing);
+  isEditingRef.current = isEditing;
+  const equipmentRef = useRef<Equipment>(equipment);
+  equipmentRef.current = equipment;
+  const onEquipmentUpdatedRef = useRef(onEquipmentUpdated);
+  onEquipmentUpdatedRef.current = onEquipmentUpdated;
+
+  const syncEditFormFields = (eq: Equipment) => {
+    setEditSubType(normalizeSubType(eq.subType));
+    setEditCapacity(eq.capacity || '15 lbs (4A-5B)');
+    setEditZoneId(eq.zoneId);
+    setEditStatus(eq.status);
+    setEditExpiryDate(eq.expiryDate || '2030-12-31');
+    setEditNextMaintenance(eq.nextMaintenanceDate || '');
+    setEditLastInspectorName(eq.lastInspectorName || '');
+    setEditX(eq.xPercent);
+    setEditY(eq.yPercent);
+  };
+
   // Sync state if prop changes
   useEffect(() => {
     setCurrentEquip(equipment);
-    setEditSubType(normalizeSubType(equipment.subType));
-    setEditCapacity(equipment.capacity || '15 lbs (4A-5B)');
-    setEditZoneId(equipment.zoneId);
-    setEditStatus(equipment.status);
-    setEditExpiryDate(equipment.expiryDate || '2030-12-31');
-    setEditNextMaintenance(equipment.nextMaintenanceDate || '');
-    setEditX(equipment.xPercent);
-    setEditY(equipment.yPercent);
+    if (!isEditingRef.current) {
+      syncEditFormFields(equipment);
+    }
   }, [equipment]);
 
+  // Generate QR code once per equipment ID
+  useEffect(() => {
+    let isMounted = true;
+    QRCode.toDataURL(
+      `${window.location.origin}/?scan=${encodeURIComponent(equipment.id)}`,
+      { width: 220, margin: 1 }
+    )
+      .then((qrUrl) => {
+        if (isMounted) setQrDataUrl(qrUrl);
+      })
+      .catch((err) => console.error(err));
+    return () => {
+      isMounted = false;
+    };
+  }, [equipment.id]);
+
+  // Always fetch latest equipment state, inspection history, and defects from Turso/server
   useEffect(() => {
     let isMounted = true;
     const fetchDetails = async () => {
       try {
         setLoading(true);
-        const res = await api.getEquipmentById(currentEquip.id);
-        if (isMounted) {
-          setHistory(res.history);
-          setActiveDefect(res.activeDefect || null);
-          if (res.history && res.history.length > 0) {
-            setSelectedMonthCycle(res.history[0].cycle || 'latest');
+        const res = await api.getEquipmentById(equipment.id);
+        if (!isMounted) return;
+
+        if (res.equipment) {
+          setCurrentEquip(res.equipment);
+          if (!isEditingRef.current) {
+            syncEditFormFields(res.equipment);
+          }
+          if (
+            onEquipmentUpdatedRef.current &&
+            JSON.stringify(res.equipment) !== JSON.stringify(equipmentRef.current)
+          ) {
+            onEquipmentUpdatedRef.current(res.equipment);
           }
         }
 
-        const qrUrl = await QRCode.toDataURL(
-          `${window.location.origin}/?scan=${encodeURIComponent(currentEquip.id)}`,
-          { width: 220, margin: 1 }
-        );
-        if (isMounted) {
-          setQrDataUrl(qrUrl);
+        setHistory(res.history);
+        setActiveDefect(res.activeDefect || null);
+        if (res.history && res.history.length > 0) {
+          setSelectedMonthCycle(res.history[0].cycle || 'latest');
         }
       } catch (err) {
         console.error(err);
@@ -134,7 +171,7 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [currentEquip.id]);
+  }, [equipment.id, equipment.lastInspectedAt, equipment.status, equipment.lastInspectorName, equipment.subType]);
 
   const canEdit = isAdmin;
   const canInspect = isAdmin || (isInspector && isQrVerified);
@@ -161,6 +198,7 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
         status: editStatus,
         expiryDate: editExpiryDate,
         nextMaintenanceDate: editNextMaintenance,
+        lastInspectorName: editLastInspectorName.trim() || null,
         xPercent: editX,
         yPercent: editY,
       });
@@ -443,6 +481,18 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-900 bg-white focus:ring-1 focus:ring-amber-500 focus:outline-none font-mono"
                   />
                 </div>
+              </div>
+
+              {/* Inspector Name */}
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">ผู้ตรวจเช็ค (Inspector):</label>
+                <input
+                  type="text"
+                  value={editLastInspectorName}
+                  onChange={(e) => setEditLastInspectorName(e.target.value)}
+                  placeholder="ระบุชื่อผู้ตรวจเช็ค"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-900 bg-white focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                />
               </div>
 
               {/* Coordinates */}
