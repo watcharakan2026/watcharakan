@@ -149,7 +149,7 @@ export default function App() {
 
   // Quietly refresh all live data (equipment, metrics, logs, defects) across devices without UI flicker
   const syncRemoteData = useCallback(async () => {
-    if (isSyncingRef.current) return;
+    if (isSyncingRef.current || (typeof navigator !== 'undefined' && !navigator.onLine)) return;
     isSyncingRef.current = true;
     try {
       const [fetchedEquip, fetchedMetrics, fetchedInspections, fetchedActions, fetchedUsers] = await Promise.all([
@@ -172,7 +172,7 @@ export default function App() {
         return JSON.stringify(latest) === JSON.stringify(prev) ? prev : latest;
       });
     } catch (err) {
-      console.error('Background sync failed:', err);
+      console.warn('Background sync skipped:', err instanceof Error ? err.message : err);
     } finally {
       isSyncingRef.current = false;
     }
@@ -190,7 +190,7 @@ export default function App() {
       setRecentInspections(fetchedInspections);
       setCorrectiveActions(fetchedActions);
     } catch (err) {
-      console.error('Background refresh failed:', err);
+      console.warn('Background refresh skipped:', err instanceof Error ? err.message : err);
     }
   }, []);
 

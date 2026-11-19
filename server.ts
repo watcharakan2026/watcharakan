@@ -234,13 +234,17 @@ export function createExpressApp(): express.Express {
 
   // Ensure Turso connection & initial schema/seed are ready before serving API routes
   app.use('/api', async (req: Request, res: Response, next) => {
-    const isMediaRoute = req.path.startsWith('/media/') || req.path.startsWith('/drive-file/');
-    if (req.method === 'GET' && !isMediaRoute) {
-      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-      res.setHeader('Pragma', 'no-cache');
+    try {
+      const isMediaRoute = req.path.startsWith('/media/') || req.path.startsWith('/drive-file/');
+      if (req.method === 'GET' && !isMediaRoute) {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+      }
+      await ensureTursoBootstrap(isMediaRoute || req.path === '/zones');
+      next();
+    } catch (err) {
+      next(err);
     }
-    await ensureTursoBootstrap(isMediaRoute || req.path === '/zones');
-    next();
   });
 
   // 1. Health & Backend Database Mode
@@ -941,6 +945,14 @@ export function createExpressApp(): express.Express {
   // Serve static public assets
   app.use('/layouts', express.static(path.join(__dirname, 'public', 'layouts')));
   app.use('/assets', express.static(path.join(__dirname, 'public', 'assets')));
+
+  // Guarantee unknown /api/* routes and API errors always return JSON (never <!doctype html>)
+  app.use('/api', (req: Request, res: Response) => {
+    res.status(404).json({ error: `API route not found: ${req.method} ${req.originalUrl}` });
+  });
+  app.use('/api', (err: any, _req: Request, res: Response, _next: express.NextFunction) => {
+    res.status(500).json({ error: err?.message || 'Internal server error' });
+  });
 
   return app;
 }

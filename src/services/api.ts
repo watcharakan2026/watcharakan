@@ -1,16 +1,41 @@
 import { Equipment, InspectionRecord, CorrectiveAction, DashboardMetrics, ZoneInfo, User } from '../types';
 
+async function parseJsonResponse<T>(res: Response, fallbackError: string): Promise<T> {
+  const contentType = (res.headers.get('content-type') || '').toLowerCase();
+  const text = await res.text();
+  const trimmed = text.trim();
+  const looksLikeJson = contentType.includes('application/json') || trimmed.startsWith('{') || trimmed.startsWith('[');
+
+  if (!res.ok) {
+    if (looksLikeJson) {
+      try {
+        const parsed = JSON.parse(trimmed) as { error?: string };
+        throw new Error(parsed.error || fallbackError);
+      } catch (e) {
+        if (e instanceof Error && e.message !== fallbackError && !e.message.startsWith('Unexpected')) {
+          throw e;
+        }
+      }
+    }
+    throw new Error(`${fallbackError} (${res.status})`);
+  }
+
+  if (!looksLikeJson) {
+    throw new Error(`${fallbackError}: server returned non-JSON response (${res.status})`);
+  }
+
+  return JSON.parse(trimmed) as T;
+}
+
 export const api = {
   async getZones(): Promise<ZoneInfo[]> {
     const res = await fetch('/api/zones', { cache: 'no-store' });
-    if (!res.ok) throw new Error('Failed to fetch zones');
-    return res.json();
+    return parseJsonResponse<ZoneInfo[]>(res, 'Failed to fetch zones');
   },
 
   async getUsers(): Promise<User[]> {
     const res = await fetch('/api/users', { cache: 'no-store' });
-    if (!res.ok) throw new Error('Failed to fetch users');
-    return res.json();
+    return parseJsonResponse<User[]>(res, 'Failed to fetch users');
   },
 
   async getEquipment(params?: { zoneId?: string; status?: string; type?: string; search?: string }): Promise<Equipment[]> {
@@ -20,15 +45,17 @@ export const api = {
     if (params?.type && params.type !== 'all') query.set('type', params.type);
     if (params?.search) query.set('search', params.search);
 
-    const res = await fetch(`/api/equipment?${query.toString()}`, { cache: 'no-store' });
-    if (!res.ok) throw new Error('Failed to fetch equipment');
-    return res.json();
+    const qs = query.toString();
+    const res = await fetch(qs ? `/api/equipment?${qs}` : '/api/equipment', { cache: 'no-store' });
+    return parseJsonResponse<Equipment[]>(res, 'Failed to fetch equipment');
   },
 
   async getEquipmentById(id: string): Promise<{ equipment: Equipment; history: InspectionRecord[]; activeDefect?: CorrectiveAction }> {
     const res = await fetch(`/api/equipment/${encodeURIComponent(id)}`, { cache: 'no-store' });
-    if (!res.ok) throw new Error(`Equipment ${id} not found`);
-    return res.json();
+    return parseJsonResponse<{ equipment: Equipment; history: InspectionRecord[]; activeDefect?: CorrectiveAction }>(
+      res,
+      `Equipment ${id} not found`
+    );
   },
 
   async updateEquipment(id: string, updates: Partial<Equipment>): Promise<{ success: boolean; equipment: Equipment }> {
@@ -37,11 +64,7 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'Failed to update equipment' }));
-      throw new Error(err.error || 'Failed to update equipment');
-    }
-    return res.json();
+    return parseJsonResponse<{ success: boolean; equipment: Equipment }>(res, 'Failed to update equipment');
   },
 
   async batchUpdateEquipmentPositions(
@@ -52,11 +75,10 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ updates }),
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'Failed to batch update equipment positions' }));
-      throw new Error(err.error || 'Failed to batch update equipment positions');
-    }
-    return res.json();
+    return parseJsonResponse<{ success: boolean; count: number; equipment: Equipment[] }>(
+      res,
+      'Failed to batch update equipment positions'
+    );
   },
 
   async createEquipment(
@@ -67,22 +89,14 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'Failed to create equipment' }));
-      throw new Error(err.error || 'Failed to create equipment');
-    }
-    return res.json();
+    return parseJsonResponse<{ success: boolean; equipment: Equipment }>(res, 'Failed to create equipment');
   },
 
   async deleteEquipment(id: string): Promise<{ success: boolean; deletedId: string }> {
     const res = await fetch(`/api/equipment/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'Failed to delete equipment' }));
-      throw new Error(err.error || 'Failed to delete equipment');
-    }
-    return res.json();
+    return parseJsonResponse<{ success: boolean; deletedId: string }>(res, 'Failed to delete equipment');
   },
 
   async submitInspection(data: {
@@ -101,11 +115,10 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'Failed to submit inspection' }));
-      throw new Error(err.error || 'Failed to submit inspection');
-    }
-    return res.json();
+    return parseJsonResponse<{ success: boolean; inspection: InspectionRecord; updatedEquipment: Equipment }>(
+      res,
+      'Failed to submit inspection'
+    );
   },
 
   async getInspections(params?: { equipmentId?: string; zoneId?: string; result?: string; limit?: number }): Promise<InspectionRecord[]> {
@@ -115,9 +128,9 @@ export const api = {
     if (params?.result && params.result !== 'all') query.set('result', params.result);
     if (params?.limit) query.set('limit', params.limit.toString());
 
-    const res = await fetch(`/api/inspections?${query.toString()}`, { cache: 'no-store' });
-    if (!res.ok) throw new Error('Failed to fetch inspections');
-    return res.json();
+    const qs = query.toString();
+    const res = await fetch(qs ? `/api/inspections?${qs}` : '/api/inspections', { cache: 'no-store' });
+    return parseJsonResponse<InspectionRecord[]>(res, 'Failed to fetch inspections');
   },
 
   async getCorrectiveActions(params?: { status?: string; zoneId?: string }): Promise<CorrectiveAction[]> {
@@ -125,9 +138,9 @@ export const api = {
     if (params?.status && params.status !== 'all') query.set('status', params.status);
     if (params?.zoneId && params.zoneId !== 'all') query.set('zoneId', params.zoneId);
 
-    const res = await fetch(`/api/corrective-actions?${query.toString()}`, { cache: 'no-store' });
-    if (!res.ok) throw new Error('Failed to fetch corrective actions');
-    return res.json();
+    const qs = query.toString();
+    const res = await fetch(qs ? `/api/corrective-actions?${qs}` : '/api/corrective-actions', { cache: 'no-store' });
+    return parseJsonResponse<CorrectiveAction[]>(res, 'Failed to fetch corrective actions');
   },
 
   async updateCorrectiveAction(id: string, updates: Partial<CorrectiveAction>): Promise<CorrectiveAction> {
@@ -136,8 +149,7 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
     });
-    if (!res.ok) throw new Error('Failed to update corrective action');
-    return res.json();
+    return parseJsonResponse<CorrectiveAction>(res, 'Failed to update corrective action');
   },
 
   async verifyCorrectiveAction(
@@ -149,14 +161,15 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ verifiedBy }),
     });
-    if (!res.ok) throw new Error('Failed to verify corrective action');
-    return res.json();
+    return parseJsonResponse<{ success: boolean; correctiveAction: CorrectiveAction; updatedEquipment?: Equipment }>(
+      res,
+      'Failed to verify corrective action'
+    );
   },
 
   async getMetrics(): Promise<DashboardMetrics> {
     const res = await fetch('/api/dashboard/metrics', { cache: 'no-store' });
-    if (!res.ok) throw new Error('Failed to fetch dashboard metrics');
-    return res.json();
+    return parseJsonResponse<DashboardMetrics>(res, 'Failed to fetch dashboard metrics');
   },
 
   async login(username: string, password: string): Promise<{ success: boolean; user: User; role: User['role'] }> {
@@ -165,11 +178,10 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'เข้าสู่ระบบไม่สำเร็จ' }));
-      throw new Error(err.error || 'User ID หรือ Password ไม่ถูกต้อง');
-    }
-    return res.json();
+    return parseJsonResponse<{ success: boolean; user: User; role: User['role'] }>(
+      res,
+      'User ID หรือ Password ไม่ถูกต้อง'
+    );
   },
 
   async updateInspection(id: string, updates: Partial<InspectionRecord>): Promise<{ success: boolean; inspection: InspectionRecord }> {
@@ -178,16 +190,14 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
     });
-    if (!res.ok) throw new Error('Failed to update inspection record');
-    return res.json();
+    return parseJsonResponse<{ success: boolean; inspection: InspectionRecord }>(res, 'Failed to update inspection record');
   },
 
   async deleteInspection(id: string): Promise<{ success: boolean }> {
     const res = await fetch(`/api/inspections/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     });
-    if (!res.ok) throw new Error('Failed to delete inspection record');
-    return res.json();
+    return parseJsonResponse<{ success: boolean }>(res, 'Failed to delete inspection record');
   },
 
   async createUser(data: Omit<User, 'id'>): Promise<{ success: boolean; user: User }> {
@@ -196,8 +206,7 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    if (!res.ok) throw new Error('Failed to create user');
-    return res.json();
+    return parseJsonResponse<{ success: boolean; user: User }>(res, 'Failed to create user');
   },
 
   async updateUser(id: string, updates: Partial<User>): Promise<{ success: boolean; user: User }> {
@@ -206,19 +215,18 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
     });
-    if (!res.ok) throw new Error('Failed to update user');
-    return res.json();
+    return parseJsonResponse<{ success: boolean; user: User }>(res, 'Failed to update user');
   },
 
   async deleteUser(id: string): Promise<{ success: boolean }> {
     const res = await fetch(`/api/users/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     });
-    if (!res.ok) throw new Error('Failed to delete user');
-    return res.json();
+    return parseJsonResponse<{ success: boolean }>(res, 'Failed to delete user');
   },
 
   async resetData(): Promise<void> {
-    await fetch('/api/reset-data', { method: 'POST' });
+    const res = await fetch('/api/reset-data', { method: 'POST' });
+    await parseJsonResponse<{ success: boolean }>(res, 'Failed to reset database');
   },
 };
