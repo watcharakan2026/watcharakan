@@ -249,11 +249,11 @@ export const InspectorDashboard: React.FC<InspectorDashboardProps> = ({
                       ดูข้อมูล & ประวัติ
                     </button>
                     <button
-                      onClick={() => onInspectEquipment(equip)}
+                      onClick={onOpenScanner}
                       className="flex-1 py-1.5 px-3 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-colors shadow-xs flex items-center justify-center gap-1 cursor-pointer"
                     >
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>ตรวจเช็คทันที</span>
+                      <QrCode className="w-3.5 h-3.5" />
+                      <span>สแกน QR ตรวจถัง</span>
                     </button>
                   </div>
                 </div>

@@ -67,6 +67,7 @@ export default function App() {
   const [isPrintSheetOpen, setIsPrintSheetOpen] = useState<boolean>(false);
   const [inspectingEquipment, setInspectingEquipment] = useState<Equipment | null>(null);
   const [selectedEquipmentDetail, setSelectedEquipmentDetail] = useState<Equipment | null>(null);
+  const [qrVerifiedIds, setQrVerifiedIds] = useState<Set<string>>(() => new Set());
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   // Handle Login Success with role-based routing
@@ -128,6 +129,11 @@ export default function App() {
       if (scanId) {
         const found = fetchedEquip.find(e => e.id.toUpperCase() === scanId.toUpperCase());
         if (found) {
+          setQrVerifiedIds(prev => {
+            const next = new Set(prev);
+            next.add(found.id.toUpperCase());
+            return next;
+          });
           setSelectedEquipmentDetail(found);
           setSelectedZoneId(found.zoneId);
         }
@@ -163,6 +169,12 @@ export default function App() {
   const handleInspectionSuccess = (updatedEquipment: Equipment) => {
     setEquipmentList(prev => prev.map(e => (e.id === updatedEquipment.id ? updatedEquipment : e)));
     setInspectingEquipment(null);
+    setQrVerifiedIds(prev => {
+      if (!prev.has(updatedEquipment.id.toUpperCase())) return prev;
+      const next = new Set(prev);
+      next.delete(updatedEquipment.id.toUpperCase());
+      return next;
+    });
     void refreshSummaryData();
 
     if (activeTab === 'layout') {
@@ -273,7 +285,13 @@ export default function App() {
                 zones={zones}
                 recentInspections={recentInspections}
                 onOpenScanner={() => setIsScannerOpen(true)}
-                onInspectEquipment={(equip) => setInspectingEquipment(equip)}
+                onInspectEquipment={(equip) => {
+                  if (isAdmin || qrVerifiedIds.has(equip.id.toUpperCase())) {
+                    setInspectingEquipment(equip);
+                  } else {
+                    setIsScannerOpen(true);
+                  }
+                }}
                 onSelectEquipment={(equip) => setSelectedEquipmentDetail(equip)}
                 onNavigateToZone={(zoneId) => {
                   setSelectedZoneId(zoneId);
@@ -302,7 +320,7 @@ export default function App() {
                 equipment={equipmentList}
                 onSelectEquipment={(equip) => setSelectedEquipmentDetail(equip)}
                 onInspectEquipment={(equip) => {
-                  if (isAdmin || isInspector) {
+                  if (isAdmin || (isInspector && qrVerifiedIds.has(equip.id.toUpperCase()))) {
                     setInspectingEquipment(equip);
                   } else {
                     setSelectedEquipmentDetail(equip);
@@ -374,16 +392,24 @@ export default function App() {
       {isScannerOpen && (
         <QRScannerModal
           allEquipment={equipmentList}
+          userRole={userRole}
           onClose={() => setIsScannerOpen(false)}
-          onEquipmentFound={(equip) => {
+          onEquipmentFound={(equip, verifiedViaQr = false) => {
             setIsScannerOpen(false);
+            if (verifiedViaQr) {
+              setQrVerifiedIds(prev => {
+                const next = new Set(prev);
+                next.add(equip.id.toUpperCase());
+                return next;
+              });
+            }
             setSelectedEquipmentDetail(equip);
           }}
         />
       )}
 
-      {/* 2. Inspection Checklist Form Modal (ADMIN & INSPECTOR) */}
-      {inspectingEquipment && (
+      {/* 2. Inspection Checklist Form Modal (ADMIN & QR-verified INSPECTOR) */}
+      {inspectingEquipment && (isAdmin || (isInspector && qrVerifiedIds.has(inspectingEquipment.id.toUpperCase()))) && (
         <InspectionFormModal
           equipment={inspectingEquipment}
           currentUser={currentUser || DEFAULT_VISITOR}
@@ -400,11 +426,15 @@ export default function App() {
           equipment={selectedEquipmentDetail}
           zones={zones}
           userRole={userRole}
+          isQrVerified={qrVerifiedIds.has(selectedEquipmentDetail.id.toUpperCase())}
+          onOpenScanner={() => setIsScannerOpen(true)}
           onClose={() => setSelectedEquipmentDetail(null)}
           onInspect={(equip) => {
             setSelectedEquipmentDetail(null);
-            if (isAdmin || isInspector) {
+            if (isAdmin || (isInspector && qrVerifiedIds.has(equip.id.toUpperCase()))) {
               setInspectingEquipment(equip);
+            } else if (isInspector) {
+              setIsScannerOpen(true);
             } else {
               setIsLoginOpen(true);
             }

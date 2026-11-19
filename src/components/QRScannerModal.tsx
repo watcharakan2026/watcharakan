@@ -10,19 +10,22 @@ import {
   Waves, 
   AlertCircle
 } from 'lucide-react';
-import { Equipment } from '../types';
+import { Equipment, UserRole } from '../types';
 
 interface QRScannerModalProps {
   allEquipment: Equipment[];
+  userRole?: UserRole;
   onClose: () => void;
-  onEquipmentFound: (equipment: Equipment) => void;
+  onEquipmentFound: (equipment: Equipment, verifiedViaQr?: boolean) => void;
 }
 
 export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   allEquipment,
+  userRole = 'VISITOR',
   onClose,
   onEquipmentFound,
 }) => {
+  const isInspectorOnlyQr = userRole === 'INSPECTOR';
   const [scannerMode, setScannerMode] = useState<'camera' | 'select' | 'upload'>('camera');
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -51,7 +54,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     const equip = allEquipment.find(e => e.id.toUpperCase() === id);
     if (equip) {
       stopCamera();
-      onEquipmentFound(equip);
+      onEquipmentFound(equip, true);
     } else {
       setCameraError(`ไม่พบรหัสอุปกรณ์ "${id}" ในระบบคลังสินค้า CDC`);
     }
@@ -79,8 +82,13 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
       setIsScanning(true);
     } catch (err: any) {
       console.warn('Camera start error:', err);
-      setCameraError('ไม่สามารถเปิดกล้องได้ (เบราว์เซอร์อาจจำกัดสิทธิ์ในกรอบ iFrame หรือยังไม่อนุญาตให้เข้าถึงกล้อง)');
-      setScannerMode('select');
+      if (isInspectorOnlyQr) {
+        setCameraError('ไม่สามารถเปิดกล้องในหน้าต่างนี้ได้ กรุณาอัปโหลดรูปถ่าย QR Code ที่ติดอยู่บนตัวถังเพื่อยืนยันการตรวจ');
+        setScannerMode('upload');
+      } else {
+        setCameraError('ไม่สามารถเปิดกล้องได้ (เบราว์เซอร์อาจจำกัดสิทธิ์ในกรอบ iFrame หรือยังไม่อนุญาตให้เข้าถึงกล้อง)');
+        setScannerMode('select');
+      }
     }
   };
 
@@ -158,7 +166,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         </div>
 
         {/* Mode Navigation Tabs */}
-        <div className="grid grid-cols-3 bg-slate-100 border-b border-slate-200 p-1 text-xs font-medium">
+        <div className={`grid ${isInspectorOnlyQr ? 'grid-cols-2' : 'grid-cols-3'} bg-slate-100 border-b border-slate-200 p-1 text-xs font-medium`}>
           <button
             onClick={() => setScannerMode('camera')}
             className={`py-2 rounded-lg flex items-center justify-center gap-1.5 transition-colors ${
@@ -170,17 +178,19 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
             <Camera className="w-3.5 h-3.5" />
             <span>กล้องสด</span>
           </button>
-          <button
-            onClick={() => setScannerMode('select')}
-            className={`py-2 rounded-lg flex items-center justify-center gap-1.5 transition-colors ${
-              scannerMode === 'select'
-                ? 'bg-white text-amber-700 font-semibold shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Search className="w-3.5 h-3.5" />
-            <span>ค้นหาอุปกรณ์</span>
-          </button>
+          {!isInspectorOnlyQr && (
+            <button
+              onClick={() => setScannerMode('select')}
+              className={`py-2 rounded-lg flex items-center justify-center gap-1.5 transition-colors ${
+                scannerMode === 'select'
+                  ? 'bg-white text-amber-700 font-semibold shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Search className="w-3.5 h-3.5" />
+              <span>ค้นหาอุปกรณ์</span>
+            </button>
+          )}
           <button
             onClick={() => setScannerMode('upload')}
             className={`py-2 rounded-lg flex items-center justify-center gap-1.5 transition-colors ${
@@ -190,7 +200,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
             }`}
           >
             <Upload className="w-3.5 h-3.5" />
-            <span>อัปโหลดภาพ</span>
+            <span>อัปโหลดภาพ QR</span>
           </button>
         </div>
 
@@ -267,7 +277,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
                     key={item.id}
                     onClick={() => {
                       stopCamera();
-                      onEquipmentFound(item);
+                      onEquipmentFound(item, false);
                     }}
                     className="w-full p-2.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 hover:border-amber-400 flex items-center justify-between text-left transition-colors group"
                   >
@@ -303,7 +313,9 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
               <div>
                 <div className="font-semibold">{cameraError}</div>
                 <div className="text-[11px] text-amber-800 mt-0.5">
-                  ท่านสามารถใช้แท็บ "ค้นหาอุปกรณ์" เพื่อเลือกอุปกรณ์จำลองการสแกนได้ทันที
+                  {isInspectorOnlyQr
+                    ? 'สำหรับผู้ตรวจสอบ (Inspector) ต้องสแกน QR Code ที่ติดอยู่บนตัวถังด้วยกล้องหรืออัปโหลดภาพ QR เท่านั้น'
+                    : 'ท่านสามารถใช้แท็บ "ค้นหาอุปกรณ์" เพื่อเลือกอุปกรณ์จำลองการสแกนได้ทันที'}
                 </div>
               </div>
             </div>

@@ -34,6 +34,8 @@ interface EquipmentDetailModalProps {
   onEquipmentDeleted?: (id: string) => void;
   isOwner?: boolean;
   userRole?: UserRole;
+  isQrVerified?: boolean;
+  onOpenScanner?: () => void;
   onRequestOwnerLogin?: () => void;
 }
 
@@ -46,6 +48,8 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
   onEquipmentDeleted,
   isOwner = false,
   userRole = 'VISITOR',
+  isQrVerified = false,
+  onOpenScanner,
   onRequestOwnerLogin,
 }) => {
   const isAdmin = userRole === 'ADMIN' || (isOwner && userRole !== 'INSPECTOR');
@@ -133,7 +137,7 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
   }, [currentEquip.id]);
 
   const canEdit = isAdmin;
-  const canInspect = isAdmin || isInspector;
+  const canInspect = isAdmin || (isInspector && isQrVerified);
 
   const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -248,7 +252,11 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
             <div className="flex items-center gap-2">
               <UserCheck className="w-4 h-4 text-sky-600" />
               <span className="font-bold">🔍 สิทธิ์ผู้ตรวจสอบ (INSPECTOR)</span>
-              <span className="text-sky-800 hidden sm:inline">· ดำเนินการตรวจสอบและบันทึกผลได้ (ไม่สามารถแก้ไขข้อมูลทะเบียนได้)</span>
+              <span className="text-sky-800 hidden sm:inline">
+                {isQrVerified
+                  ? '· ยืนยันตัวถังผ่าน QR Code แล้ว (พร้อมบันทึกผลตรวจ)'
+                  : '· ต้องสแกน QR Code ของถังเท่านั้นจึงจะบันทึกผลตรวจได้'}
+              </span>
             </div>
           </div>
         ) : (
@@ -802,7 +810,7 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
               ) : null}
             </div>
 
-            {/* Inspection Trigger: Admin & Inspector can inspect */}
+            {/* Inspection Trigger: Admin always; Inspector only when verified by scanning tank QR Code */}
             {canInspect ? (
               <button
                 onClick={() => {
@@ -814,6 +822,26 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
                 <QrCode className="w-4 h-4" />
                 <span>บันทึกตรวจเช็คอุปกรณ์นี้ (Inspect Now)</span>
               </button>
+            ) : isInspector ? (
+              <div className="flex items-center gap-2 flex-wrap justify-end">
+                <span className="text-[11px] text-amber-800 font-semibold flex items-center gap-1">
+                  <Lock className="w-3.5 h-3.5 text-amber-600" />
+                  <span>ต้องสแกน QR Code ที่ตัวถังเท่านั้น</span>
+                </span>
+                {onOpenScanner && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onOpenScanner();
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 transition-colors shadow-xs cursor-pointer"
+                  >
+                    <QrCode className="w-3.5 h-3.5" />
+                    <span>สแกน QR Code</span>
+                  </button>
+                )}
+              </div>
             ) : (
               <div className="text-[11px] text-slate-500 font-medium flex items-center gap-1.5">
                 <ShieldCheck className="w-4 h-4 text-emerald-600" />
