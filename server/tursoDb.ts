@@ -413,6 +413,15 @@ export async function getEquipmentHistoryFromTurso(
   return res.rows.map(r => rowToInspection(r as Record<string, any>));
 }
 
+export async function getAllInspectionsFromTurso(): Promise<InspectionRecord[] | null> {
+  if (getBackendDbMode() === 'local_json') return null;
+  const client = await ensureSchema();
+  const res = await client.execute(
+    'SELECT id, equipmentId, equipmentType, zoneId, zoneName, inspectorName, inspectorRole, inspectorEmployeeId, inspectedAt, cycle, overallResult, defectDetails, photoUrl, notes FROM inspections ORDER BY inspectedAt DESC'
+  );
+  return res.rows.map(r => rowToInspection(r as Record<string, any>));
+}
+
 export async function seedTursoDatabase(data: WorkspaceDatabaseState): Promise<void> {
   if (getBackendDbMode() === 'local_json') return;
   const client = await ensureSchema();

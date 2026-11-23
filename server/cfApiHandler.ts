@@ -17,6 +17,7 @@ import {
   uploadPhotoToTursoBackend,
   fetchMediaFromTursoBackend,
   getEquipmentHistoryFromTurso,
+  getAllInspectionsFromTurso,
   type WorkspaceDatabaseState,
 } from './tursoDb.ts';
 
@@ -624,11 +625,21 @@ export async function handleCloudflareApiRequest(
     const zoneId = url.searchParams.get('zoneId');
     const result = url.searchParams.get('result');
     const limit = url.searchParams.get('limit');
+    const all = url.searchParams.get('all');
+
+    if (all === 'true' && getBackendDbMode() === 'turso' && tursoConnected) {
+      try {
+        const allRows = await getAllInspectionsFromTurso();
+        if (allRows) list = allRows;
+      } catch (err) {
+        console.warn('Turso full inspections fallback to cache:', err);
+      }
+    }
 
     if (equipmentId) list = list.filter(i => i.equipmentId.toUpperCase() === equipmentId.toUpperCase());
     if (zoneId && zoneId !== 'all') list = list.filter(i => i.zoneId === zoneId);
     if (result && result !== 'all') list = list.filter(i => i.overallResult === result);
-    if (limit) list = list.slice(0, parseInt(limit, 10));
+    if (limit && all !== 'true') list = list.slice(0, parseInt(limit, 10));
 
     return jsonResponse(list);
   }

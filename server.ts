@@ -22,6 +22,7 @@ import {
   uploadPhotoToTursoBackend,
   fetchMediaFromTursoBackend,
   getEquipmentHistoryFromTurso,
+  getAllInspectionsFromTurso,
 } from './server/tursoDb.ts';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -692,9 +693,18 @@ export function createExpressApp(): express.Express {
   });
 
   // 7. Inspections audit log
-  app.get('/api/inspections', (req: Request, res: Response) => {
+  app.get('/api/inspections', async (req: Request, res: Response) => {
+    const { equipmentId, zoneId, result, limit, all } = req.query;
     let list = db.inspections;
-    const { equipmentId, zoneId, result, limit } = req.query;
+
+    if (all === 'true' && getBackendDbMode() === 'turso' && tursoConnected) {
+      try {
+        const allRows = await getAllInspectionsFromTurso();
+        if (allRows) list = allRows;
+      } catch (err) {
+        console.warn('Turso full inspections fallback to cache:', err);
+      }
+    }
 
     if (equipmentId && typeof equipmentId === 'string') {
       list = list.filter(i => i.equipmentId.toUpperCase() === equipmentId.toUpperCase());
@@ -705,7 +715,7 @@ export function createExpressApp(): express.Express {
     if (result && typeof result === 'string' && result !== 'all') {
       list = list.filter(i => i.overallResult === result);
     }
-    if (limit && typeof limit === 'string') {
+    if (limit && typeof limit === 'string' && all !== 'true') {
       list = list.slice(0, parseInt(limit, 10));
     }
 

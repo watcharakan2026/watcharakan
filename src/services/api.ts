@@ -121,12 +121,13 @@ export const api = {
     );
   },
 
-  async getInspections(params?: { equipmentId?: string; zoneId?: string; result?: string; limit?: number }): Promise<InspectionRecord[]> {
+  async getInspections(params?: { equipmentId?: string; zoneId?: string; result?: string; limit?: number; all?: boolean }): Promise<InspectionRecord[]> {
     const query = new URLSearchParams();
     if (params?.equipmentId) query.set('equipmentId', params.equipmentId);
     if (params?.zoneId && params.zoneId !== 'all') query.set('zoneId', params.zoneId);
     if (params?.result && params.result !== 'all') query.set('result', params.result);
     if (params?.limit) query.set('limit', params.limit.toString());
+    if (params?.all) query.set('all', 'true');
 
     const qs = query.toString();
     const res = await fetch(qs ? `/api/inspections?${qs}` : '/api/inspections', { cache: 'no-store' });

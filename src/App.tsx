@@ -112,7 +112,7 @@ export default function App() {
           api.getUsers(),
           api.getEquipment(),
           api.getMetrics(),
-          api.getInspections({ limit: 100 }),
+          api.getInspections({ limit: 250 }),
           api.getCorrectiveActions(),
         ]);
 
@@ -155,7 +155,7 @@ export default function App() {
       const [fetchedEquip, fetchedMetrics, fetchedInspections, fetchedActions, fetchedUsers] = await Promise.all([
         api.getEquipment(),
         api.getMetrics(),
-        api.getInspections({ limit: 100 }),
+        api.getInspections({ limit: 250 }),
         api.getCorrectiveActions(),
         api.getUsers(),
       ]);
@@ -183,7 +183,7 @@ export default function App() {
     try {
       const [fetchedMetrics, fetchedInspections, fetchedActions] = await Promise.all([
         api.getMetrics(),
-        api.getInspections({ limit: 100 }),
+        api.getInspections({ limit: 250 }),
         api.getCorrectiveActions(),
       ]);
       setMetrics(fetchedMetrics);
