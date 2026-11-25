@@ -235,7 +235,7 @@ export const InspectorDashboard: React.FC<InspectorDashboardProps> = ({
                         <span>{equip.zoneName} · หน้า {equip.pageNumber}</span>
                       </div>
                       <div className="text-[10px] text-slate-400 font-mono">
-                        ความจุ: {equip.capacity || '15 lbs'} · หมดอายุ: {equip.expiryDate || '2030-12-31'}
+                        ความจุ: {equip.capacity || '15 lbs'} · หมดอายุ: {equip.expiryDate || '2029-03-12'}
                       </div>
                     </div>
                   </div>

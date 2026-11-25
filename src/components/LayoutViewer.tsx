@@ -325,7 +325,7 @@ export const LayoutViewer: React.FC<LayoutViewerProps> = ({
         xPercent: newEquipX,
         yPercent: newEquipY,
         capacity: newEquipCapacity,
-        expiryDate: '2031-12-31',
+        expiryDate: '2029-03-12',
         nextMaintenanceDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       });
 

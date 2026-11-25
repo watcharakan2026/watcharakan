@@ -429,7 +429,7 @@ export async function handleCloudflareApiRequest(
         lastInspectorName: null,
         lastResult: null,
         capacity: capacity || (type === 'fire_hose_cabinet' ? '1.5" x 100 ft Hose' : '15 lbs (4A-5B)'),
-        expiryDate: expiryDate || '2030-12-31',
+        expiryDate: expiryDate || '2029-03-12',
         nextMaintenanceDate:
           nextMaintenanceDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       };

@@ -81,7 +81,7 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
   );
   const [editZoneId, setEditZoneId] = useState<string>(equipment.zoneId);
   const [editStatus, setEditStatus] = useState<Equipment['status']>(equipment.status);
-  const [editExpiryDate, setEditExpiryDate] = useState<string>(equipment.expiryDate || '2030-12-31');
+  const [editExpiryDate, setEditExpiryDate] = useState<string>(equipment.expiryDate || '2029-03-12');
   const [editNextMaintenance, setEditNextMaintenance] = useState<string>(equipment.nextMaintenanceDate || '');
   const [editLastInspectorName, setEditLastInspectorName] = useState<string>(equipment.lastInspectorName || '');
   const [editX, setEditX] = useState<number>(equipment.xPercent);
@@ -108,7 +108,7 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
     );
     setEditZoneId(eq.zoneId);
     setEditStatus(eq.status);
-    setEditExpiryDate(eq.expiryDate || '2030-12-31');
+    setEditExpiryDate(eq.expiryDate || '2029-03-12');
     setEditNextMaintenance(eq.nextMaintenanceDate || '');
     setEditLastInspectorName(eq.lastInspectorName || '');
     setEditX(eq.xPercent);
@@ -639,7 +639,7 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
                     </div>
                     <div>
                       <span className="text-slate-500 block text-[10px]">วันหมดอายุสาร:</span>
-                      <span className="font-semibold text-slate-800 font-mono">{currentEquip.expiryDate || '2030-12-31'}</span>
+                      <span className="font-semibold text-slate-800 font-mono">{currentEquip.expiryDate || '2029-03-12'}</span>
                     </div>
                   </div>
                   <div className="pt-1 border-t border-slate-200 text-[11px] text-slate-600">
