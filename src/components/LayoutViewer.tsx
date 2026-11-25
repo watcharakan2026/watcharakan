@@ -20,6 +20,12 @@ import {
 } from 'lucide-react';
 import { Equipment, ZoneInfo, EquipmentType, UserRole } from '../types';
 import { api } from '../services/api';
+import {
+  AGENT_OPTIONS,
+  normalizeAgentSubType,
+  getDefaultCapacityForAgent,
+  resolveEquipmentCapacity,
+} from '../utils/equipmentAgents';
 
 interface LayoutViewerProps {
   zones: ZoneInfo[];
@@ -82,7 +88,7 @@ export const LayoutViewer: React.FC<LayoutViewerProps> = ({
   // Add Equipment Form State
   const [newEquipId, setNewEquipId] = useState<string>('');
   const [newEquipType, setNewEquipType] = useState<EquipmentType>('fire_extinguisher');
-  const [newEquipSubType, setNewEquipSubType] = useState<string>('Dry Chemical (ถังผงเคมีแห้ง 15 lbs)');
+  const [newEquipSubType, setNewEquipSubType] = useState<string>('Dry Chemical');
   const [newEquipCapacity, setNewEquipCapacity] = useState<string>('15 lbs (4A-5B)');
   const [newEquipX, setNewEquipX] = useState<number>(50);
   const [newEquipY, setNewEquipY] = useState<number>(50);
@@ -290,7 +296,7 @@ export const LayoutViewer: React.FC<LayoutViewerProps> = ({
 
     setNewEquipId(suggestedId);
     setNewEquipType('fire_extinguisher');
-    setNewEquipSubType('Dry Chemical (ถังผงเคมีแห้ง 15 lbs)');
+    setNewEquipSubType('Dry Chemical');
     setNewEquipCapacity('15 lbs (4A-5B)');
     setNewEquipX(initialX);
     setNewEquipY(initialY);
@@ -343,8 +349,12 @@ export const LayoutViewer: React.FC<LayoutViewerProps> = ({
   const handleOpenEditModal = (item: Equipment) => {
     const coords = getEquipmentCoords(item);
     setEquipmentToEdit(item);
-    setEditSubType(item.subType);
-    setEditCapacity(item.capacity || '');
+    setEditSubType(item.type === 'fire_extinguisher' ? normalizeAgentSubType(item.subType) : item.subType);
+    setEditCapacity(
+      item.type === 'fire_extinguisher'
+        ? resolveEquipmentCapacity(item.subType, item.capacity)
+        : item.capacity || ''
+    );
     setEditExpiryDate(item.expiryDate || '');
     setEditNextMaintenance(item.nextMaintenanceDate || '');
     setEditX(coords.xPercent);
@@ -935,8 +945,9 @@ export const LayoutViewer: React.FC<LayoutViewerProps> = ({
                       <td className="py-2 px-3 text-slate-700">
                         {item.type === 'fire_extinguisher' ? 'ถังดับเพลิง' : 'ตู้ดับเพลิง'}
                       </td>
-                      <td className="py-2 px-3 text-slate-600 truncate max-w-[160px]">
-                        {item.subType}
+                      <td className="py-2 px-3 text-slate-600 truncate max-w-[180px]">
+                        {item.type === 'fire_extinguisher' ? normalizeAgentSubType(item.subType) : item.subType}
+                        {' '}({item.type === 'fire_extinguisher' ? resolveEquipmentCapacity(item.subType, item.capacity) : (item.capacity || '-')})
                       </td>
                       <td className="py-2 px-3 font-mono">
                         <input
@@ -1064,7 +1075,7 @@ export const LayoutViewer: React.FC<LayoutViewerProps> = ({
                     type="button"
                     onClick={() => {
                       setNewEquipType('fire_extinguisher');
-                      setNewEquipSubType('Dry Chemical (ถังผงเคมีแห้ง 15 lbs)');
+                      setNewEquipSubType('Dry Chemical');
                       setNewEquipCapacity('15 lbs (4A-5B)');
                     }}
                     className={`p-2.5 rounded-lg border text-left flex items-center gap-2 transition-all ${
@@ -1104,26 +1115,36 @@ export const LayoutViewer: React.FC<LayoutViewerProps> = ({
 
               {/* Subtype Dropdown */}
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">รุ่นและขนาดสารดับเพลิง *</label>
+                <label className="block font-semibold text-slate-700 mb-1">ชนิดสารดับเพลิงและรุ่น (Agent & Specification) *</label>
                 {newEquipType === 'fire_extinguisher' ? (
-                  <select
-                    value={newEquipSubType}
-                    onChange={(e) => {
-                      setNewEquipSubType(e.target.value);
-                      if (e.target.value.includes('15 lbs')) setNewEquipCapacity('15 lbs (4A-5B)');
-                      else if (e.target.value.includes('10 lbs')) setNewEquipCapacity('10 lbs (CO2)');
-                      else if (e.target.value.includes('Foam')) setNewEquipCapacity('9 Litres');
-                      else if (e.target.value.includes('Fire Ade')) setNewEquipCapacity('10 Litres');
-                    }}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 bg-white"
-                  >
-                    <option value="Dry Chemical (ถังผงเคมีแห้ง 15 lbs)">Dry Chemical (ผงเคมีแห้ง 15 lbs - มาตรฐานคลังสินค้า)</option>
-                    <option value="Dry Chemical (ถังผงเคมีแห้ง 10 lbs)">Dry Chemical (ผงเคมีแห้ง 10 lbs)</option>
-                    <option value="CO2 Carbon Dioxide (ถังก๊าซคาร์บอนไดออกไซด์ 10 lbs)">CO2 Carbon Dioxide (ก๊าซ CO2 10 lbs - ห้องเซิร์ฟเวอร์/ตู้ไฟ)</option>
-                    <option value="Clean Agent Non-CFC (สารสะอาด Halotron 10 lbs)">Clean Agent Non-CFC (สารสะอาด 10 lbs)</option>
-                    <option value="Foam Extinguisher (ถังโฟม 9 ลิตร)">Foam Extinguisher (ถังโฟม 9 ลิตร - สารไวไฟ/น้ำมัน)</option>
-                    <option value="Fire Ade 2000 (ถังดับเพลิงสูตรน้ำชีวภาพ)">Fire Ade 2000 (ถังดับเพลิงสูตรน้ำชีวภาพ - ดับได้ทุกประเภท A, B, C, D, K)</option>
-                  </select>
+                  <div className="space-y-2.5">
+                    <select
+                      value={newEquipSubType}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setNewEquipSubType(val);
+                        setNewEquipCapacity(getDefaultCapacityForAgent(val));
+                      }}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 bg-white"
+                    >
+                      {AGENT_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">ขนาดความจุ (Capacity) *</label>
+                      <input
+                        type="text"
+                        required
+                        value={newEquipCapacity}
+                        onChange={(e) => setNewEquipCapacity(e.target.value)}
+                        placeholder="เช่น 15 lbs (4A-5B)"
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-900 bg-white"
+                      />
+                    </div>
+                  </div>
                 ) : (
                   <select
                     value={newEquipSubType}
@@ -1214,13 +1235,31 @@ export const LayoutViewer: React.FC<LayoutViewerProps> = ({
 
             <form onSubmit={handleSubmitEditEquipment} className="p-5 space-y-3.5 text-xs">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">รุ่นและสารดับเพลิง:</label>
-                <input
-                  type="text"
-                  value={editSubType}
-                  onChange={(e) => setEditSubType(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-900 bg-white"
-                />
+                <label className="block font-semibold text-slate-700 mb-1">ชนิดสารดับเพลิงและรุ่น (Agent & Specification):</label>
+                {equipmentToEdit.type === 'fire_extinguisher' ? (
+                  <select
+                    value={editSubType}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setEditSubType(val);
+                      setEditCapacity(getDefaultCapacityForAgent(val));
+                    }}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-900 bg-white"
+                  >
+                    {AGENT_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={editSubType}
+                    onChange={(e) => setEditSubType(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-900 bg-white"
+                  />
+                )}
               </div>
 
               <div>

@@ -24,6 +24,12 @@ import {
 import { Equipment, InspectionRecord, CorrectiveAction, ZoneInfo, UserRole } from '../types';
 import { api } from '../services/api';
 import { DriveImage } from './DriveImage';
+import {
+  AGENT_OPTIONS,
+  normalizeAgentSubType,
+  getDefaultCapacityForAgent,
+  resolveEquipmentCapacity,
+} from '../utils/equipmentAgents';
 
 interface EquipmentDetailModalProps {
   equipment: Equipment;
@@ -63,19 +69,16 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedMonthCycle, setSelectedMonthCycle] = useState<string>('latest');
 
-  const normalizeSubType = (raw: string): string => {
-    const lower = (raw || '').toLowerCase();
-    if (lower.includes('co2') || lower.includes('คาร์บอน')) return 'CO2';
-    if (lower.includes('avd')) return 'AVD';
-    if (lower.includes('fire ade')) return 'Fire Ade 2000';
-    if (lower.includes('afff') || lower.includes('foam') || lower.includes('โฟม')) return 'AFFF';
-    return 'Dry Chemical';
-  };
-
   // Edit Mode State (Only accessible to Owner)
   const [isEditing, setIsEditing] = useState<boolean>(false);
-  const [editSubType, setEditSubType] = useState<string>(() => normalizeSubType(equipment.subType));
-  const [editCapacity, setEditCapacity] = useState<string>(equipment.capacity || '15 lbs (4A-5B)');
+  const [editSubType, setEditSubType] = useState<string>(() =>
+    equipment.type === 'fire_extinguisher' ? normalizeAgentSubType(equipment.subType) : equipment.subType
+  );
+  const [editCapacity, setEditCapacity] = useState<string>(() =>
+    equipment.type === 'fire_extinguisher'
+      ? resolveEquipmentCapacity(equipment.subType, equipment.capacity)
+      : equipment.capacity || '15 lbs (4A-5B)'
+  );
   const [editZoneId, setEditZoneId] = useState<string>(equipment.zoneId);
   const [editStatus, setEditStatus] = useState<Equipment['status']>(equipment.status);
   const [editExpiryDate, setEditExpiryDate] = useState<string>(equipment.expiryDate || '2030-12-31');
@@ -97,8 +100,12 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
   onEquipmentUpdatedRef.current = onEquipmentUpdated;
 
   const syncEditFormFields = (eq: Equipment) => {
-    setEditSubType(normalizeSubType(eq.subType));
-    setEditCapacity(eq.capacity || '15 lbs (4A-5B)');
+    setEditSubType(eq.type === 'fire_extinguisher' ? normalizeAgentSubType(eq.subType) : eq.subType);
+    setEditCapacity(
+      eq.type === 'fire_extinguisher'
+        ? resolveEquipmentCapacity(eq.subType, eq.capacity)
+        : eq.capacity || '15 lbs (4A-5B)'
+    );
     setEditZoneId(eq.zoneId);
     setEditStatus(eq.status);
     setEditExpiryDate(eq.expiryDate || '2030-12-31');
@@ -171,7 +178,7 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [equipment.id, equipment.lastInspectedAt, equipment.status, equipment.lastInspectorName, equipment.subType]);
+  }, [equipment.id, equipment.lastInspectedAt, equipment.status, equipment.lastInspectorName, equipment.subType, equipment.capacity]);
 
   const canEdit = isAdmin;
   const canInspect = isAdmin || (isInspector && isQrVerified);
@@ -399,19 +406,15 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
                   onChange={(e) => {
                     const val = e.target.value;
                     setEditSubType(val);
-                    if (val === 'Dry Chemical') setEditCapacity('15 lbs (4A-5B)');
-                    else if (val === 'CO2') setEditCapacity('10 lbs');
-                    else if (val === 'AVD') setEditCapacity('9 Litres');
-                    else if (val === 'Fire Ade 2000') setEditCapacity('10 Litres');
-                    else if (val === 'AFFF') setEditCapacity('9 Litres');
+                    setEditCapacity(getDefaultCapacityForAgent(val));
                   }}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 bg-white focus:ring-1 focus:ring-amber-500 focus:outline-none"
                 >
-                  <option value="Dry Chemical">1. Dry Chemical</option>
-                  <option value="CO2">2. CO2</option>
-                  <option value="AVD">3. AVD</option>
-                  <option value="Fire Ade 2000">4. Fire Ade 2000</option>
-                  <option value="AFFF">5. AFFF</option>
+                  {AGENT_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -621,12 +624,18 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
                 <div className="col-span-2 space-y-2.5 bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs">
                   <div>
                     <span className="text-slate-500 block text-[10px] font-semibold uppercase">ชนิดสารดับเพลิง (Agent Type):</span>
-                    <span className="font-bold text-slate-900 text-xs">{currentEquip.subType}</span>
+                    <span className="font-bold text-slate-900 text-xs">
+                      {currentEquip.type === 'fire_extinguisher' ? normalizeAgentSubType(currentEquip.subType) : currentEquip.subType}
+                    </span>
                   </div>
                   <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200">
                     <div>
                       <span className="text-slate-500 block text-[10px]">ขนาดความจุ:</span>
-                      <span className="font-semibold text-slate-800">{currentEquip.capacity || '15 lbs (4A-5B)'}</span>
+                      <span className="font-semibold text-slate-800">
+                        {currentEquip.type === 'fire_extinguisher'
+                          ? resolveEquipmentCapacity(currentEquip.subType, currentEquip.capacity)
+                          : currentEquip.capacity || '-'}
+                      </span>
                     </div>
                     <div>
                       <span className="text-slate-500 block text-[10px]">วันหมดอายุสาร:</span>

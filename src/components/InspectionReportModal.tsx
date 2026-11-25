@@ -15,6 +15,7 @@ import {
 import { InspectionRecord, ZoneInfo, Equipment } from '../types';
 import { DriveImage } from './DriveImage';
 import { api } from '../services/api';
+import { normalizeAgentSubType, resolveEquipmentCapacity } from '../utils/equipmentAgents';
 
 interface InspectionReportModalProps {
   inspections: InspectionRecord[];
@@ -80,6 +81,22 @@ export const InspectionReportModal: React.FC<InspectionReportModalProps> = ({
     return map;
   }, [fullInspections]);
 
+  const equipmentById = useMemo(() => {
+    const map = new Map<string, Equipment>();
+    for (const eq of allEquipment) {
+      map.set(eq.id.toUpperCase(), eq);
+    }
+    return map;
+  }, [allEquipment]);
+
+  const getCanonicalSubType = (eq: Equipment) =>
+    eq.type === 'fire_extinguisher' ? normalizeAgentSubType(eq.subType) : eq.subType;
+
+  const getCanonicalCapacity = (eq: Equipment) =>
+    eq.type === 'fire_extinguisher'
+      ? resolveEquipmentCapacity(eq.subType, eq.capacity)
+      : eq.capacity || '-';
+
   // Complete master list of ALL equipment (212 tanks) merged with latest inspection info
   const completeEquipmentRows = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -100,9 +117,13 @@ export const InspectionReportModal: React.FC<InspectionReportModalProps> = ({
         const effectiveInspectedAt = latestInsp?.inspectedAt || eq.lastInspectedAt || null;
         const effectiveInspector = latestInsp?.inspectorName || eq.lastInspectorName || '-';
         const effectiveNotes = latestInsp?.defectDetails || latestInsp?.notes || '';
+        const canonicalSubType = getCanonicalSubType(eq);
+        const canonicalCapacity = getCanonicalCapacity(eq);
 
         return {
           equipment: eq,
+          canonicalSubType,
+          canonicalCapacity,
           latestInsp,
           effectiveResult,
           effectiveInspectedAt,
@@ -116,6 +137,8 @@ export const InspectionReportModal: React.FC<InspectionReportModalProps> = ({
         if (q) {
           const hay = [
             row.equipment.id,
+            row.canonicalSubType,
+            row.canonicalCapacity,
             row.equipment.subType,
             row.equipment.zoneName,
             row.effectiveInspector,
@@ -226,8 +249,8 @@ export const InspectionReportModal: React.FC<InspectionReportModalProps> = ({
         esc(idx + 1),
         esc(row.equipment.id),
         esc(row.equipment.type === 'fire_extinguisher' ? 'ถังดับเพลิง' : 'ตู้ดับเพลิง'),
-        esc(row.equipment.subType),
-        esc(row.equipment.capacity || '-'),
+        esc(row.canonicalSubType),
+        esc(row.canonicalCapacity),
         esc(row.equipment.pageNumber),
         esc(row.equipment.zoneName),
         esc(statusLabelTh(row.equipment.status)),
@@ -246,6 +269,8 @@ export const InspectionReportModal: React.FC<InspectionReportModalProps> = ({
         'วันที่และเวลา',
         'รหัสอุปกรณ์',
         'ประเภทอุปกรณ์',
+        'ชนิดสารดับเพลิง',
+        'ขนาดความจุ',
         'โซน / แผนก',
         'ผลการตรวจสอบ',
         'ผู้ตรวจสอบ',
@@ -254,18 +279,25 @@ export const InspectionReportModal: React.FC<InspectionReportModalProps> = ({
         'หมายเหตุ',
       ];
 
-      rows = filteredLogs.map((i, idx) => [
-        esc(idx + 1),
-        esc(new Date(i.inspectedAt).toLocaleString('th-TH')),
-        esc(i.equipmentId),
-        esc(i.equipmentType === 'fire_extinguisher' ? 'ถังดับเพลิง' : 'ตู้ดับเพลิง'),
-        esc(i.zoneName),
-        esc(i.overallResult),
-        esc(i.inspectorName),
-        esc(i.inspectorEmployeeId),
-        esc(i.defectDetails || ''),
-        esc(i.notes || ''),
-      ]);
+      rows = filteredLogs.map((i, idx) => {
+        const eq = equipmentById.get(i.equipmentId.toUpperCase());
+        const sub = eq ? getCanonicalSubType(eq) : 'Dry Chemical';
+        const cap = eq ? getCanonicalCapacity(eq) : '-';
+        return [
+          esc(idx + 1),
+          esc(new Date(i.inspectedAt).toLocaleString('th-TH')),
+          esc(i.equipmentId),
+          esc(i.equipmentType === 'fire_extinguisher' ? 'ถังดับเพลิง' : 'ตู้ดับเพลิง'),
+          esc(sub),
+          esc(cap),
+          esc(i.zoneName),
+          esc(i.overallResult),
+          esc(i.inspectorName),
+          esc(i.inspectorEmployeeId),
+          esc(i.defectDetails || ''),
+          esc(i.notes || ''),
+        ];
+      });
 
       filename = `Fire_Safety_Audit_Log_CDC_${timeFilter}_${new Date().toISOString().slice(0, 10)}.csv`;
     }
@@ -518,9 +550,9 @@ export const InspectionReportModal: React.FC<InspectionReportModalProps> = ({
                           )}
                         </td>
                         <td className="py-2.5 px-3 font-sans text-slate-700">
-                          <div className="font-medium text-slate-900">{eq.subType}</div>
+                          <div className="font-medium text-slate-900">{row.canonicalSubType}</div>
                           <div className="text-[10px] text-slate-500">
-                            {eq.capacity || '-'} · หมดอายุ {eq.expiryDate || '-'}
+                            {row.canonicalCapacity} · หมดอายุ {eq.expiryDate || '-'}
                           </div>
                         </td>
                         <td className="py-2.5 px-3 font-sans text-slate-700">
@@ -601,7 +633,7 @@ export const InspectionReportModal: React.FC<InspectionReportModalProps> = ({
                   <th className="py-3 px-3 text-center">#</th>
                   <th className="py-3 px-3">วันที่ / เวลา</th>
                   <th className="py-3 px-3">รหัสอุปกรณ์</th>
-                  <th className="py-3 px-3">ประเภท</th>
+                  <th className="py-3 px-3">ชนิดสาร / ขนาด</th>
                   <th className="py-3 px-3">โซนคลังสินค้า</th>
                   <th className="py-3 px-3">ผลการตรวจ</th>
                   <th className="py-3 px-3">ผู้ตรวจสอบ</th>
@@ -619,7 +651,13 @@ export const InspectionReportModal: React.FC<InspectionReportModalProps> = ({
                 ) : (
                   filteredLogs.map((item, idx) => {
                     const isPass = item.overallResult === 'PASS';
-                    const isExt = item.equipmentType === 'fire_extinguisher';
+                    const matchedEq = equipmentById.get(item.equipmentId.toUpperCase());
+                    const logSubType = matchedEq
+                      ? getCanonicalSubType(matchedEq)
+                      : item.equipmentType === 'fire_extinguisher'
+                      ? 'Dry Chemical'
+                      : 'ตู้ดับเพลิง';
+                    const logCapacity = matchedEq ? getCanonicalCapacity(matchedEq) : '-';
 
                     return (
                       <tr key={item.id} className="hover:bg-slate-50 transition-colors">
@@ -635,8 +673,7 @@ export const InspectionReportModal: React.FC<InspectionReportModalProps> = ({
                             <button
                               type="button"
                               onClick={() => {
-                                const eq = allEquipment.find(e => e.id.toUpperCase() === item.equipmentId.toUpperCase());
-                                if (eq) onSelectEquipment(eq);
+                                if (matchedEq) onSelectEquipment(matchedEq);
                               }}
                               className="font-mono font-bold text-amber-700 hover:text-amber-800 hover:underline flex items-center gap-1 cursor-pointer"
                               title="ดูและแก้ไขข้อมูลถังดับเพลิงนี้"
@@ -649,7 +686,8 @@ export const InspectionReportModal: React.FC<InspectionReportModalProps> = ({
                           )}
                         </td>
                         <td className="py-3 px-3 font-sans text-slate-700 whitespace-nowrap">
-                          {isExt ? 'ถังดับเพลิง' : 'ตู้ดับเพลิง'}
+                          <div className="font-medium text-slate-900">{logSubType}</div>
+                          <div className="text-[10px] text-slate-500">{logCapacity}</div>
                         </td>
                         <td className="py-3 px-3 font-sans text-slate-700">
                           {item.zoneName}
